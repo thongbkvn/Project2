@@ -3,9 +3,9 @@
 #include <omp.h>
 #include <math.h>
 
-#define FILE_NAME "data.txt"
+#define FILE_NAME "data1.txt"
 #define MAX_THREAD 4
-#define N 2 //So nguoi co so thich tuong tu
+#define K 2 //So nguoi co so thich tuong tu
 
 
 void onError(int rc, int fc, char* msg)
@@ -47,6 +47,28 @@ void readData(float ***outArr, int *row, int *colmn, char* filename)
     fclose(fp);
 }
 
+void writeData(float **A, int row, int col, char* filename)
+{
+    FILE *fp = fopen(filename, "w");
+    if (fp == NULL)
+    {
+	perror("fopen()");
+	exit(1);
+    }
+
+    fprintf(fp, "%8d %8d", row, col);
+    
+    for (int i=0; i<row; i++)
+    {
+	for (int j=0; j<col; j++)
+	    fprintf(fp,"%8.2f", A[i][j]);
+	puts("");
+    }
+    fclose(fp);
+}
+
+    
+
 /*Ham tao du lieu kiem thu*/
 void createData(int m, int n, char* filename)
 {
@@ -54,9 +76,16 @@ void createData(int m, int n, char* filename)
     fprintf(fp, "%d %d\n", m, n);
     for (int i=0; i<m; i++)
     {
-//	srand(time(NULL));
+	srand(time(NULL));
+	int p = rand() % 10;
 	for (int j=0; j<n; j++)
-	    fprintf(fp, "%4d", rand() % 6);
+	{
+	    int k = rand() % p;
+	    if (k == 1)
+		fprintf(fp, "%4d", rand() % 6);
+	    else
+		fprintf(fp, "%4d", 0);
+	}
 	fprintf(fp, "\n");
     }
     fclose(fp);
@@ -65,12 +94,14 @@ void createData(int m, int n, char* filename)
 /*Ham hien thi ma tran 2 chieu ra man hinh*/
 void readArr(float **A, int m, int n)
 {
+    puts("");
     for (int i=0; i<m; i++)
     {
 	printf("\n");
 	for (int j=0; j<n; j++)
 	    printf("%8.2f", A[i][j]);
     }
+    puts("");
 }
 
 
@@ -99,6 +130,77 @@ float cosine(float *A, float *B, int n)
 
 
 
+/*Tim k nguoi da xem item j
+  -A, m: input mang A gom m hang
+  -y: item thu j
+  -len: output chieu dai mang ket qua
+  -Tra ve mang nhung nguoi da xem item j, T[i] = -1 la dau hieu ket thuc
+
+*/
+int* findUserRated(float **A, int m, int j, int *len)
+{
+    int *T  =calloc(m, sizeof(int));
+    int k=0;
+    for (int i=0; i<m; i++)
+	if (A[i][j] != 0)
+	    T[k++] = i;
+ 
+    *len = k;
+    return T;
+}
+
+/*Ham tim k vi tri co gia tri gan 1 nhat trong mang A[0...n], -1 <= A[i] <= 1
+  thoa man A[i] co trong B
+  -A, n: mang A gom n phan tu
+  -B, m: Mang B gom len phan tu
+  -k: so phan tu can tim
+  -Tra ve mang ket qua, neu co gia tri -1 la ko hop le
+  Giai thuat selection sort, co the cai tien*/
+int* findKClosest(float A[], int n, int B[], int len, int k)
+{
+    typedef struct {
+	int index;
+	float value;
+    } element;
+
+    element* T = calloc(len, sizeof(element));
+
+
+    for (int i=0; i<len; i++)
+    {
+	T[i].index = B[i];
+	T[i].value = A[B[i]];
+    }
+
+    int max;
+    element tmp;
+    for (int i=0; i<len-1; i++)
+    {
+	max = i;
+	for (int j=i+1; j<len; j++)
+	    if (T[j].value > T[max].value)
+		max = j;
+	tmp = T[i];
+	T[i] = T[max];
+	T[max] = tmp;
+    }
+
+    int *C = calloc(k, sizeof(int));
+    for (int i=0; i<k && i<len; i++)
+	C[i] = T[i].index;
+    if (len < k)
+	for (int i=len; i<k; i++)
+	    C[i] = -1;
+
+    /* printf("\n\n"); */
+    /* for (int i=0; i<k; i++) */
+    /* 	printf("%5d", C[i]); */
+    /* printf("\n\n"); */
+    
+    free(T);
+    return C;    
+}
+
 
 
 int main(int argc, char** argv)
@@ -106,11 +208,10 @@ int main(int argc, char** argv)
     int m, n; //Hang, cot
     float **A; //Ma tran dau vao
     float **B; //Ma tran chua sim(A[0],A[1])...sim(A[0],A[n-1]), sim(A[1],A[0]), ... sim(A[1],A[n-1]),...
-    
+    float *S;
     
     readData(&A, &m, &n, FILE_NAME);
-    readArr(A, m, n);
-
+    //readArr(A,m,n);
 
     /*--------------------------------------------------*/
     /*                    CHUAN HOA                     */
@@ -147,13 +248,13 @@ int main(int argc, char** argv)
 	}
     }
 
-    readArr(A, m, n);
 
 
 
     /*--------------------------------------------------*/
     /*                    Tinh sim                      */
     /*--------------------------------------------------*/
+    
     B = calloc(m, sizeof(float*));
     for (int i=0; i<m; i++)
 	B[i] = calloc(m, sizeof(float*));
@@ -174,17 +275,51 @@ int main(int argc, char** argv)
     		B[i][j] = 1;
     	    else
     		B[i][j] = B[j][i];
-    	}
+     	} 
 
     readArr(B,m,m);
 
+    //Doc lai bang du lieu dau vao
+    readData(&A, &m, &n, FILE_NAME);
 
 
 
+    //Song song theo cot
+#pragma omp parallel for
+    for (int j=0; j<n; j++)
+    {
+	int *T, len;
+	T = findUserRated(A, m, j, &len);
+
+	
+	for (int i=0; i<m; i++)
+	    if (A[i][j] == 0)
+	    {
+		int *R;
+		float S = 0, P = 0;
+		R = findKClosest(B[i], m, T, len, K);
+	        
+		/* puts(""); */
+		/* for (int i=0; i<K; i++) */
+		/*     printf("%5d", R[i]); */
+		/* puts(""); */
+		
+		for (int t=0; t<K; t++)
+		    if (R[t] >= 0)
+		    {
+			P += B[i][R[t]];
+			S += A[R[t]][j] * B[i][R[t]];
+		    }
+
+		/* printf("  %.2f  -   %.2f  -  %.2f", P, S, S/P); */
+		/* puts(""); */
+		if (P != 0)
+		    A[i][j] = S/P;
+	    }
+    }
 
 
-
-
+    writeData(A, m, n, "output.txt");
 
 
 
