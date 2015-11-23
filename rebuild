@@ -1,0 +1,4 @@
+#!/bin/bash
+make
+./create 4 6
+cat data1.txt
