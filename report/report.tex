@@ -1,0 +1,44 @@
+\documentclass{report}
+\usepackage[utf8]{vietnam}
+\usepackage{graphicx}
+
+\begin{document}
+
+\title{BÁO CÁO ĐỒ ÁN 2}
+\author{Phạm Văn Thông}
+
+\maketitle
+\chapter{Tổng quan về tính toán song song}
+\section{Tính toán song song}
+\subsection{Tính toán song song là gì}
+Như chúng ta đã thấy, các phần mềm ngày ày đều được viết trên cơ sở của tính toán tuần tự. Các phần mềm này thường được thực hiện trên một máy tính với duy nhất một bộ xử lý. Vấn đề ở đây được giải quyết thông qua một chuỗi các lệnh tuần tự được thực hiện bởi một bộ xử lý. Tại một thời điểm chỉ có một lệnh được thực hiện.
+
+Tính toán song song ra đời là một sự cải tiến của tính toán tuần tự. Nó là sự giải quyết vấn đề dựa trên sự thực thi đồng thời của nhiều tài nguyên máy tính. Tài nguyên máy tính ở đây bao gồm:
+\begin{itemize}
+\item Một máy tính với nhiều bộ xử lý.
+\item Nhiều máy tính nối lại với nhau thành một mạng máy tính.
+\item Kết hợp cả hai loại trên.
+\end{itemize}
+
+Tính toán song song thường được dùng để giải quyết các vấn đề hết sức phức tạp yêu cầu thời gian tính toán lớn hoặc làm việc với khối dữ liệu lớn như các bài toán dự báo thời tiết, mô phỏng tai nạn xe hơi, xây dựng các mô hình thương mại và các vấn đề khoa học như khai phá dữ liệu, trí tuệ nhân tạo, an toàn dữ liệu,..
+\subsection{Tại sao phải tính toán song song}
+Việc dùng tính toàn song song là rất cần thiết. Ngoài hai nguyên nhân chính là nó được dùng để tính toán các bài toán yêu cầu thời gian tính toán lớn và khối lượng dữ liệu lớn còn có các nguyên nhân khác như để sử dụng tài nguyên của các máy khác trong một mạng LAN hoặc thông qua mạng internet, có thể sử dụng nhiều tài nguyên tính toán nhỏ kết hợp lại tạo nên một siêu máy tính. Do giớ hạn về không gian lưu trữ của bộ nhớ trên một máy đơn để giải quyết một vấn đệ lớn, việc sử dụng nhiều bộ nhớ trên nhiều máy tính là rất hữu hiệu trong trường hợp này.
+
+Giới hạn của tính toán tuần tự bao gồm cả hai nguyên nhân thực tế và nguyên nhân vật lý. Để xây ựng nên một máy tính tuần tự tốc độ cao gặp rất nhiều hạn chế:
+\begin{itemize}
+\item Về tốc độ truyền dữ liệu: Tốc độ truyền dữ liệu của máy tính tuần tự phụ thuộc trực tiếp vào sự di chuyển dữ liệu trong phần cứng, cho nên việc tăng tốc độ thực hiện phải chủ yếu căn cứ vào các yếu tố tính toán.
+\item Về kích cỡ: Công nghệ chế tạo bộ xử lý cho phép gắn nhiều bóng bán dẫn lên trên một con chip. Tuy nhiên việc này sẽ làm tăng kích thước của bộ xử lý.
+\item Về thương mại: Việc tạo ra một bộ xử lý có tốc độ xử lý cao là rất tốn kém. Sử dụng nhiều bộ xử lý nhỏ đạt hiệu quả tương tự mà lại ít tốn kém hơn.
+\end{itemize}
+
+\section{Phân loại máy tính song song}
+\subsection{Phân loại theo Flyn}
+Flyn phân loại các kiến trúc máy tính bở cách thực hiện các phép toán trên các tập dữ liệu. Có 4 loại chính
+\subsubsection{Single Instruction Single Data}
+\subsection{Phân loại dựa trên sự tương tác giữa các BXL}
+\subsection{Phân loại dựa trên cơ chế điều khiển chung}
+\section{Các mô hình lập trình song song}
+\section{Hiệu năng của tính toán song song}
+\chapter{Lập trình song song với OpenMP}
+\section{Giới thiệu về OpenMP}
+\end{document}

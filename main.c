@@ -109,7 +109,7 @@ void readArr(float **A, int m, int n)
     {
 	printf("\n");
 	for (int j=0; j<n; j++)
-	    printf("%8.2f", A[i][j]);
+	    printf("%6.2f", A[i][j]);
     }
     puts("");
 }

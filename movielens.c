@@ -8,19 +8,12 @@
 #include <omp.h>
 #include <math.h>
 #include <unistd.h>
+#include <string.h>
 
 #define MAX_THREAD 4
-#define MIN_SIM 0.0
-#define NMOVIES 10681
-#define NUSERS 71567
-#define NRATES 10000054
-
+#define SIM_MATRIX "data/sim_matrix.txt"
+#define CONFIG_FILE "movielens.cfg"
 #define DEBUG
-#define M 6
-#define U 12
-#define TRAIN_SET "data/trainset.txt"
-#define TEST_SET "data/testset.txt"
-
 
 typedef struct
 {
@@ -34,12 +27,74 @@ typedef struct
 
 //KHAI BAO CAC BIEN TOAN CUC
 float **A;//rating matrix
-int nMovies = M;
-int nUsers = U;
-char *trainSet = "data/trainset.txt";
-char *testSet = "data/testset.txt";
-int K = 2;
+float **sim; //sim matrix
+int nMovies;
+int nUsers;
+char fileFormat[10];
+char trainSet[128];
+char testSet[128];
+int hasSimMatrix;
+char pathToSimMatrix[128];
+float minSim;
+int K;
 
+
+void loadConfig(char* filename)
+{
+    FILE *fp = fopen(filename, "r");
+    if (fp == NULL)
+    {
+	perror("fopen() in loadConfig()");
+	exit(1);
+    }
+
+    char buf[128];
+	
+    fscanf(fp, "NUMBER OF MOVIES: ");
+    fgets(buf, 128, fp);
+    nMovies = atoi(buf);
+    
+    fscanf(fp, "NUMBER OF USERS: ");
+    fgets(buf, 128, fp);
+    nUsers = atoi(buf);
+
+    fscanf(fp, "FILE FORMAT: ");
+    fgets(buf, 128, fp);
+    strncpy(fileFormat, buf, strlen(buf)-1);
+    
+    fscanf(fp, "TRAIN SET: ");
+    fgets(buf, 128, fp);
+    strncpy(trainSet, buf, strlen(buf)-1); //do la bien toan cuc nen da co null-terminated
+    
+    fscanf(fp, "TEST SET: ");
+    fgets(buf, 128, fp);
+    strncpy(testSet, buf, strlen(buf)-1);
+    
+    fscanf(fp, "SIMILAR MOVIES: ");
+    fgets(buf, 128, fp);
+    K = atoi(buf);
+
+    fscanf(fp, "HAS SIM MATRIX: ");
+    fgets(buf, 128, fp);
+    hasSimMatrix = atoi(buf);
+
+    fscanf(fp, "PATH TO SIM MATRIX: ");
+    fgets(buf, 128, fp);
+    strncpy(pathToSimMatrix, buf, strlen(buf)-1);
+    fscanf(fp, "MIN SIM: %f", &minSim);
+    
+    
+    printf("\nLoad config success: ");
+    printf("\nnMovies: %d        nUsers: %d", nMovies, nUsers);
+    printf("\nFile format: %s", fileFormat);
+    printf("\nTrain set: %s", trainSet);
+    printf("\nTest set: %s", testSet);
+    printf("\nSimilar movies: %d", K);
+    printf("\nHas sim matrix: %d", hasSimMatrix);
+    printf("\nPath to sim matrix: %s", pathToSimMatrix);
+    
+    fclose(fp);
+}
 
 //Ham doc du lieu tu file training
 void readData(float ***outArr, int nMovies, int nUsers, char* filename)
@@ -62,8 +117,12 @@ void readData(float ***outArr, int nMovies, int nUsers, char* filename)
  
     while (!feof(fp))
     {
-	fscanf(fp, "%d::%d::%f::%ld", &uID, &mID, &rate, &t);
+	if (!strcmp(fileFormat, "ML10M"))
+	    fscanf(fp, "%d::%d::%f::%ld", &uID, &mID, &rate, &t);
 
+	if (!strcmp(fileFormat, "ML100K"))
+	fscanf(fp, "%d%d%f%ld", &uID, &mID, &rate, &t);
+	
 	if (mID <= nMovies && uID <= nUsers)
 	    A[mID-1][uID-1] = rate;
     }
@@ -79,7 +138,7 @@ void readTestData(Rating **B, int *len, char* filename)
     FILE *fp = fopen(filename, "r");
     if (fp == NULL)
     {
-	perror("fopen()");
+	perror("fopen() in readTestData()");
 	exit(1);
     }
 
@@ -103,7 +162,12 @@ void readTestData(Rating **B, int *len, char* filename)
 
     for (int i=0; i<nRating; i++)
     {
-	fscanf(fp, "%d::%d::%f::%ld", &uID, &mID, &rate, &t);
+	if (!strcmp(fileFormat, "ML10M"))
+	    fscanf(fp, "%d::%d::%f::%ld", &uID, &mID, &rate, &t);
+
+	if (!strcmp(fileFormat, "ML100K"))
+	fscanf(fp, "%d%d%f%ld", &uID, &mID, &rate, &t);
+	
 	if (mID <= nMovies && uID <= nUsers)
 	{
 	    T[j].uID = uID;
@@ -135,12 +199,12 @@ void readArr(float **A, int m, int n)
 }
 
 //Ham in ma tran vao file
-void writeData(float **A, int row, int col, char* filename)
+void writeDataToFile(float **A, int row, int col, char* filename)
 {
     FILE *fp = fopen(filename, "w");
     if (fp == NULL)
     {
-	perror("fopen()");
+	perror("fopen() in writeDataToFile()");
 	exit(1);
     }
 
@@ -248,7 +312,7 @@ int* findKClosest(float A[], int n, int B[], int len, int k)
     int i;
     for (i=0; i<k && i<len; i++)
     {
-	if (T[i].value <= MIN_SIM)
+	if (T[i].value < minSim)
 	    break;
 	C[i] = T[i].index;
     }
@@ -269,6 +333,7 @@ int* findKClosest(float A[], int n, int B[], int len, int k)
     return C;    
 }
 
+//Du doan rating
 void ratePredict(Rating *R, float** A, float **sim)
 {
     int m = (*R).mID, u = (*R).uID;
@@ -293,12 +358,74 @@ void ratePredict(Rating *R, float** A, float **sim)
 
     if (P != 0)
 	(*R).P = S/P;
+    free(simSet);
+    free(userRateSet);
 }
 
+void computeAvgRating(float **AVG, float **A, int nMovies, int nUsers)
+{
+    float *T;
+    T = calloc(nUsers, sizeof(float));
+#pragma omp parallel for schedule(static, 3)
+    for (int j=0; j<nUsers; j++)
+    {
+	float S = 0;
+	int P = 0;
+	for (int i=0; i<nMovies; i++)
+	{
+	    S += A[i][j];
+	    P ++;
+	}
 
+	if (T != 0)
+	    T[j] = S/P;
+	else
+	    T[j] = 3; //rating trung binh	    
+    }
+	
+    *AVG = T;
+}
 
+void loadArrFromFile(float ***outArr, int *row, int *colmn, char* filename)
+{
+    FILE *fp = fopen(filename, "r");
+    if (fp == NULL)
+    {
+	perror("fopen()");
+	exit(1);
+    }
 
+    float **A;
+    int m, n;
 
+    fscanf(fp, "%d%d", &m, &n);
+    A = calloc(m, sizeof(float*));
+    for (int i=0; i<m; i++)
+	A[i] = calloc(n, sizeof(float));
+
+    for (int i=0; i<m; i++)
+	for (int j=0; j<n; j++)
+	    fscanf(fp, "%f", &A[i][j]);
+    *outArr = A;
+    *row = m; *colmn = n;
+    fclose(fp);
+}
+
+void writeResultToFile(Rating* B, int len, char* filename)
+{
+    FILE *fp = fopen(filename, "w");
+    if (fp == NULL)
+    {
+	perror("Error fopen() in writeResultToFile");
+	exit(1);
+    }
+
+    for (int i=0; i<len; i++)
+    {
+	fprintf(fp, "%d::%d::%.2f::%.2f\n",B[i].uID, B[i].mID, B[i].R, B[i].P);
+    }
+    fclose(fp);
+}
 
 
 
@@ -310,87 +437,94 @@ void ratePredict(Rating *R, float** A, float **sim)
 	
 int main(int argc, char** argv)
 {
-  
-    
-    readData(&A, nMovies, nUsers, trainSet);
+    loadConfig(CONFIG_FILE);
+
+    if (!hasSimMatrix)
+    {
+	readData(&A, nMovies, nUsers, trainSet);
 
 #ifdef DEBUG
-    readArr(A, nMovies, nUsers);
+	readArr(A, nMovies, nUsers);
 #endif
 
-    omp_set_num_threads(MAX_THREAD);
+	omp_set_num_threads(MAX_THREAD);
 
 
     
-    /*        CHUAN HOA       */
-    printf("\nChuan hoa: ");
+	/*        CHUAN HOA       */
+	printf("\n\nChuan hoa: ");
 #pragma omp parallel for
-    for (int i=0; i<nMovies; i++)
-    {
-	float sum = 0; //Tong cac rating
-	int t = 0;     //So rating
+	for (int i=0; i<nMovies; i++)
+	{
+	    float sum = 0; //Tong cac rating
+	    int t = 0;     //So rating
 	    
 #pragma omp parallel for schedule(static, 3) reduction(+:sum)
-	for (int j=0; j<nUsers; j++)
-	{
-	    if (A[i][j] != 0)
+	    for (int j=0; j<nUsers; j++)
 	    {
-		sum += A[i][j];
-		t++;
+		if (A[i][j] != 0)
+		{
+		    sum += A[i][j];
+		    t++;
+		}
 	    }
-	}
 
-	float rowMean = sum/t;
+	    float rowMean = sum/t;
 	    
 #pragma omp parallel for schedule(static, 3)
-	for (int j=0; j<nUsers; j++)
-	{
-	    if (A[i][j] != 0)
-		A[i][j] -= rowMean;
-	}
+	    for (int j=0; j<nUsers; j++)
+	    {
+		if (A[i][j] != 0)
+		    A[i][j] -= rowMean;
+	    }
 
-	printf("\n%d/%d", i, nMovies);
-    }
+	    printf("\n%d/%d", i, nMovies);
+	}
 
 
 #ifdef DEBUG
-    puts("");
-    printf("\nSTANDARDIZED MARTRIX: \n");
-    readArr(A, nMovies, nUsers);
-    puts("");
+	puts("");
+	printf("\nSTANDARDIZED MARTRIX: \n");
+	readArr(A, nMovies, nUsers);
+	puts("");
 #endif
 
 
 
-    /*         TINH SIMILARY MATRIX           */
-    printf("\n\nTinh sim: ");
-    float **sim;
-    sim = calloc(nMovies, sizeof(float*));
-    for (int i=0; i<nMovies; i++)
-	sim[i] = calloc(nMovies, sizeof(float*));
+	/*         TINH SIMILARY MATRIX           */
+	printf("\n\nTinh sim: ");    sim = calloc(nMovies, sizeof(float*));
+	for (int i=0; i<nMovies; i++)
+	    sim[i] = calloc(nMovies, sizeof(float*));
 
 #pragma omp parallel for schedule(static, 3)
-    for (int i=0; i<nMovies; i++)
-    {
-#pragma omp parallel for schedule(static, 3)
-	for (int j=i+1; j<nMovies; j++)
+	for (int i=0; i<nMovies; i++)
 	{
-	    sim[i][j] = cosine(A[i], A[j], nUsers);
+#pragma omp parallel for schedule(static, 3)
+	    for (int j=i+1; j<nMovies; j++)
+	    {
+		sim[i][j] = cosine(A[i], A[j], nUsers);
+	    }
+	    printf("\n%d/%d: ", i, nMovies);
 	}
-	printf("\n%d/%d: ", i, nMovies);
+
+	for (int i=0; i<nMovies; i++)
+	    for (int j=0; j<=i; j++)
+	    {
+		if (i == j)
+		    sim[i][j] = 1;
+		else
+		    sim[i][j] = sim[j][i];
+	    }
+
+	writeDataToFile(sim, nMovies, nMovies, pathToSimMatrix);
+	freeArr(A, nMovies);
     }
-
-    for (int i=0; i<nMovies; i++)
-	for (int j=0; j<=i; j++)
-	{
-	    if (i == j)
-		sim[i][j] = 1;
-	    else
-		sim[i][j] = sim[j][i];
-	}
-
-    writeData(sim, nMovies, nMovies, "data/simmatrix.txt");
-
+    else
+    {
+	int tmp;
+	loadArrFromFile(&sim, &tmp, &tmp, pathToSimMatrix);
+    }
+    
 #ifdef DEBUG
     puts("");
     printf("\nSIMILARY MATRIX: \n");
@@ -398,30 +532,52 @@ int main(int argc, char** argv)
     puts("");
 #endif
 
-    /*          Tinh rating            */
+
+    
+    /*          TINH RATING            */
     Rating *B;
     int len;
     readTestData(&B, &len, testSet);
-    freeArr(A, nMovies);
     readData(&A, nMovies, nUsers, trainSet);
+    float *AVG;
+    computeAvgRating(&AVG, A, nMovies, nUsers);
 
 #pragma omp parallel for schedule(static, 3)
     for (int i=0; i<len; i++)
     {
 	ratePredict(&B[i], A, sim);
+	if (B[i].P == 0)
+	    B[i].P = AVG[B[i].uID];
     }
 
+    writeResultToFile(B, len, "data/result.txt");
+
+    float T = 0;
+    float temp;
+#pragma omp parallel for schedule(static, 3) reduction(+:T) private(temp)
+    for (int i=0; i<len; i++)
+    {
+	temp = B[i].R - B[i].P;
+	T += temp * temp;
+    }
+
+    printf("\n %f", sqrt(T/len));
+    
 #ifdef DEBUG
     puts("");
     printf("RESULT: ");
     for (int i=0; i<len; i++)
+    {
 	printf("\nmID: %5d    uID: %5d     Real: %6.2fd      Predict: %6.2f", B[i].mID, B[i].uID, B[i].R, B[i].P);
+	usleep(1000000);
+    }
     puts("");
 #endif
 
     
 
 
+    free(AVG);
     freeArr(sim, nMovies);
     free(B);
     freeArr(A, nMovies);
