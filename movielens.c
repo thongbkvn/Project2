@@ -10,13 +10,12 @@
 #include <unistd.h>
 
 #define MAX_THREAD 4
-#define K 2
 #define MIN_SIM 0.0
 #define NMOVIES 10681
 #define NUSERS 71567
 #define NRATES 10000054
 
-//#define DEBUG
+#define DEBUG
 #define M 6
 #define U 12
 #define TRAIN_SET "data/trainset.txt"
@@ -29,7 +28,7 @@ typedef struct
     int uID;
     float P; //predict
     float R; //real rating
-} rating;
+} Rating;
 
 
 
@@ -39,7 +38,7 @@ int nMovies = M;
 int nUsers = U;
 char *trainSet = "data/trainset.txt";
 char *testSet = "data/testset.txt";
-
+int K = 2;
 
 
 //Ham doc du lieu tu file training
@@ -64,7 +63,6 @@ void readData(float ***outArr, int nMovies, int nUsers, char* filename)
     while (!feof(fp))
     {
 	fscanf(fp, "%d::%d::%f::%ld", &uID, &mID, &rate, &t);
-//printf("\n%d %d %.1f %ld", mID, uID, rate, t);
 
 	if (mID <= nMovies && uID <= nUsers)
 	    A[mID-1][uID-1] = rate;
@@ -76,7 +74,7 @@ void readData(float ***outArr, int nMovies, int nUsers, char* filename)
 
 
 //Ham doc du lieu tu file test
-void readTestData(rating **B, int *len, char* filename)
+void readTestData(Rating **B, int *len, char* filename)
 {
     FILE *fp = fopen(filename, "r");
     if (fp == NULL)
@@ -94,7 +92,7 @@ void readTestData(rating **B, int *len, char* filename)
     }
 
     int nRating = n-1;// = countLines(filename);
-    rating *T = calloc(nRating, sizeof(rating));
+    Rating *T = calloc(nRating, sizeof(Rating));
    
     
     int uID, mID, j=0;
@@ -102,7 +100,8 @@ void readTestData(rating **B, int *len, char* filename)
     float rate;
 
     rewind(fp);
-    while (!feof(fp))
+
+    for (int i=0; i<nRating; i++)
     {
 	fscanf(fp, "%d::%d::%f::%ld", &uID, &mID, &rate, &t);
 	if (mID <= nMovies && uID <= nUsers)
@@ -116,7 +115,7 @@ void readTestData(rating **B, int *len, char* filename)
     
     *B = T;
     *len = j; //Vi chi xet nhung phan tu hop le
-    
+
     fclose(fp);
 }
 
@@ -157,6 +156,12 @@ void writeData(float **A, int row, int col, char* filename)
     fclose(fp);
 }
 
+void freeArr(float **A, int row)
+{
+    for (int i=0; i<row; i++)
+	free(A[i]);
+    free(A);
+}
 
 /* Ham tinh goc 2 vector
    - A, B vector dau vao
@@ -264,6 +269,43 @@ int* findKClosest(float A[], int n, int B[], int len, int k)
     return C;    
 }
 
+void ratePredict(Rating *R, float** A, float **sim)
+{
+    int m = (*R).mID, u = (*R).uID;
+    int *userRateSet, len;
+    int *simSet;//length of simSet = K
+    float S = 0, P = 0;
+    int t;
+
+    userRateSet = findUserRated(A, nMovies, u, &len);
+    
+    simSet = findKClosest(sim[m], nMovies, userRateSet, len, K);
+    for (int i=0; i<K; i++)
+    {
+	//Truong hop khong du k nguoi tuong tu thi R[i] = -1
+	if (simSet[i] < 0)
+	    break;
+	
+	t = simSet[i];//Phim tuong tu voi phim m
+	P += sim[m][t];
+	S += A[t][u] * sim[m][t];
+    }
+
+    if (P != 0)
+	(*R).P = S/P;
+}
+
+
+
+
+
+
+
+
+
+
+
+
 
 	
 int main(int argc, char** argv)
@@ -312,7 +354,8 @@ int main(int argc, char** argv)
 
 
 #ifdef DEBUG
-    printf("STANDARDIZED MARTRIX: \n");
+    puts("");
+    printf("\nSTANDARDIZED MARTRIX: \n");
     readArr(A, nMovies, nUsers);
     puts("");
 #endif
@@ -349,30 +392,39 @@ int main(int argc, char** argv)
     writeData(sim, nMovies, nMovies, "data/simmatrix.txt");
 
 #ifdef DEBUG
-    printf("SIMILARY MATRIX: \n");
+    puts("");
+    printf("\nSIMILARY MATRIX: \n");
     readArr(sim, nMovies, nMovies);
     puts("");
 #endif
 
     /*          Tinh rating            */
-    rating *B;
+    Rating *B;
     int len;
     readTestData(&B, &len, testSet);
+    freeArr(A, nMovies);
+    readData(&A, nMovies, nUsers, trainSet);
+
+#pragma omp parallel for schedule(static, 3)
     for (int i=0; i<len; i++)
-	printf("\n[%d, %d]: %.2f", B[i].mID, B[i].uID, B[i].R);
+    {
+	ratePredict(&B[i], A, sim);
+    }
+
+#ifdef DEBUG
+    puts("");
+    printf("RESULT: ");
+    for (int i=0; i<len; i++)
+	printf("\nmID: %5d    uID: %5d     Real: %6.2fd      Predict: %6.2f", B[i].mID, B[i].uID, B[i].R, B[i].P);
+    puts("");
+#endif
+
     
 
 
-    
-
-
-    for (int i=0; i<nMovies; i++)
-	free(sim[i]);
-    free(sim);
-//    free(B);
-    for (int i=0; i<nMovies; i++)
-	free(A[i]);
-    free(A);
+    freeArr(sim, nMovies);
+    free(B);
+    freeArr(A, nMovies);
     puts("");
     return 0;
 }
