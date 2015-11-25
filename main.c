@@ -7,7 +7,8 @@
 #define MAX_THREAD 4
 #define K 2 //So nguoi co so thich tuong tu
 #define MAXP 4 //Xac suat toi thieu so phim da xem cua 1 nguoi, dung trong ham tao du lieu kiem thu
-//#define DEBUG
+#define MIN_SIM 0.0
+#define DEBUG
 
 
 void onError(int rc, int fc, char* msg)
@@ -195,11 +196,21 @@ int* findKClosest(float A[], int n, int B[], int len, int k)
     }
 
     int *C = calloc(k, sizeof(int));
-    for (int i=0; i<k && i<len; i++)
+    
+    int i;
+    for (i=0; i<k && i<len; i++)
+    {
+	if (T[i].value <= MIN_SIM)
+	    break;
 	C[i] = T[i].index;
-    if (len < k)
-	for (int i=len; i<k; i++)
-	    C[i] = -1;
+    }
+
+    for (; i<k; i++)
+	C[i] = -1;
+    
+    /* if (len < k) */
+    /* 	for (int i=len; i<k; i++) */
+    /* 	    C[i] = -1; */
 
     /* printf("\n\n"); */
     /* for (int i=0; i<k; i++) */
@@ -314,25 +325,28 @@ int main(int argc, char** argv)
 
 
     //Song song theo cot
-#pragma omp parallel for schedule(static, 3)
+//#pragma omp parallel for schedule(static, 3)
     for (int j=0; j<n; j++)
     {
 	int *T, len;
 	T = findUserRated(A, m, j, &len);
 
 	
-#pragma omp parallel for schedule(static, 3)
+//#pragma omp parallel for schedule(static, 3)
 	for (int i=0; i<m; i++)
 	    if (A[i][j] == 0)
 	    {
 		int *R;
 		float S = 0, P = 0;
 		R = findKClosest(B[i], m, T, len, K);
-	        
+
+		/* #ifdef DEBUG */
 		/* puts(""); */
+		/* printf("A[%d][%d]: ", i, j); */
 		/* for (int i=0; i<K; i++) */
 		/*     printf("%5d", R[i]); */
 		/* puts(""); */
+		/* #endif */
 		
 		for (int t=0; t<K; t++)
 		    if (R[t] >= 0)
