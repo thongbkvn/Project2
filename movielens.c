@@ -33,9 +33,16 @@ typedef struct
 
 
 
+//KHAI BAO CAC BIEN TOAN CUC
+float **A;//rating matrix
+int nMovies = M;
+int nUsers = U;
+char *trainSet = "data/trainset.txt";
+char *testSet = "data/testset.txt";
 
 
 
+//Ham doc du lieu tu file training
 void readData(float ***outArr, int nMovies, int nUsers, char* filename)
 {
     FILE *fp = fopen(filename, "r");
@@ -65,6 +72,55 @@ void readData(float ***outArr, int nMovies, int nUsers, char* filename)
     
     *outArr = A;
 }
+
+
+
+//Ham doc du lieu tu file test
+void readTestData(rating **B, int *len, char* filename)
+{
+    FILE *fp = fopen(filename, "r");
+    if (fp == NULL)
+    {
+	perror("fopen()");
+	exit(1);
+    }
+
+    int n=0;
+    char buff[1024];
+    while (!feof(fp))
+    {
+	fgets(buff, 1024, fp);
+	n++;
+    }
+
+    int nRating = n-1;// = countLines(filename);
+    rating *T = calloc(nRating, sizeof(rating));
+   
+    
+    int uID, mID, j=0;
+    long t;
+    float rate;
+
+    rewind(fp);
+    while (!feof(fp))
+    {
+	fscanf(fp, "%d::%d::%f::%ld", &uID, &mID, &rate, &t);
+	if (mID <= nMovies && uID <= nUsers)
+	{
+	    T[j].uID = uID;
+	    T[j].mID = mID;
+	    T[j].R = rate;
+	    j++;
+	}
+    }
+    
+    *B = T;
+    *len = j; //Vi chi xet nhung phan tu hop le
+    
+    fclose(fp);
+}
+
+
 
 /*Ham hien thi ma tran 2 chieu ra man hinh*/
 void readArr(float **A, int m, int n)
@@ -208,33 +264,11 @@ int* findKClosest(float A[], int n, int B[], int len, int k)
     return C;    
 }
 
-int countLines(char* filename)
-{
-    FILE *fp = fopen(filename, "r");
-    if (fp == NULL)
-    {
-	perror("fopen in countLines()");
-	exit(1);
-    }
 
-    int n=0;
-    char buff[1024];
-    while (!feof(fp))
-    {
-	fgets(buff, 1024, fp);
-	n++;
-    }
-    
-    return n-1;
-}
 	
 int main(int argc, char** argv)
 {
-    float **A;//rating matrix
-    int nMovies = M;
-    int nUsers = U;
-    char *trainSet = "data/trainset.txt";
-    char *testSet = "data/testset.txt";
+  
     
     readData(&A, nMovies, nUsers, trainSet);
 
@@ -321,8 +355,11 @@ int main(int argc, char** argv)
 #endif
 
     /*          Tinh rating            */
-    int nRating = countLines(testSet);
-    rating *B = calloc(nRating, sizeof(rating));
+    rating *B;
+    int len;
+    readTestData(&B, &len, testSet);
+    for (int i=0; i<len; i++)
+	printf("\n[%d, %d]: %.2f", B[i].mID, B[i].uID, B[i].R);
     
 
 
@@ -332,7 +369,7 @@ int main(int argc, char** argv)
     for (int i=0; i<nMovies; i++)
 	free(sim[i]);
     free(sim);
-
+//    free(B);
     for (int i=0; i<nMovies; i++)
 	free(A[i]);
     free(A);
