@@ -22,20 +22,24 @@ typedef struct
     float P; //predict
     float R; //real rating
 } Rating;
+    
 
-
+typedef enum {ML100K, ML1M, ML10M, ML100M} DataFormatType;
 
 //KHAI BAO CAC BIEN TOAN CUC
 float **A;//rating matrix
 float **sim; //sim matrix
 int nMovies;
 int nUsers;
-char fileFormat[10];
+int *MI;
+DataFormatType dataFormat;
+char moviesData[128];
+char usersData[128];
 char trainSet[128];
 char testSet[128];
 int hasSimMatrix;
 char pathToSimMatrix[128];
-float minSim;
+float minSim = 0;
 int K;
 
 
@@ -48,45 +52,55 @@ void loadConfig(char* filename)
 	exit(1);
     }
 
-    char buf[128];
+    char ff[10], buf[20];
 	
-    fscanf(fp, "NUMBER OF MOVIES: ");
-    fgets(buf, 128, fp);
+    fscanf(fp, "Numbers of movie: ");
+    fgets(buf, 20, fp);
     nMovies = atoi(buf);
-    
-    fscanf(fp, "NUMBER OF USERS: ");
-    fgets(buf, 128, fp);
+    fscanf(fp, "Numbers of user: ");
+    fgets(buf, 20, fp);
     nUsers = atoi(buf);
+    
+    fscanf(fp, "File format: ");
+    fgets(ff, 10, fp);
+    ff[strlen(ff)-1] = 0;
+    if (!strcmp(ff, "ML100K"))
+	dataFormat = ML100K;
+    else if (!strcmp(ff, "ML1M"))
+	dataFormat = ML1M;
+    else if (!strcmp(ff, "ML10M"))
+	dataFormat = ML10M;
+    else
+	dataFormat = ML100M;
+    
 
-    fscanf(fp, "FILE FORMAT: ");
-    fgets(buf, 128, fp);
-    strncpy(fileFormat, buf, strlen(buf)-1);
+    fscanf(fp, "Movies data: ");
+    fgets(moviesData, 128, fp);
+    moviesData[strlen(moviesData)-1] = 0;
     
-    fscanf(fp, "TRAIN SET: ");
-    fgets(buf, 128, fp);
-    strncpy(trainSet, buf, strlen(buf)-1); //do la bien toan cuc nen da co null-terminated
+    fscanf(fp, "Train set: ");
+    fgets(trainSet, 128, fp);
+    trainSet[strlen(trainSet)-1] = 0;
+    fscanf(fp, "Test set: ");
+    fgets(testSet, 128, fp);
+    testSet[strlen(testSet)-1] = 0;
     
-    fscanf(fp, "TEST SET: ");
-    fgets(buf, 128, fp);
-    strncpy(testSet, buf, strlen(buf)-1);
-    
-    fscanf(fp, "SIMILAR MOVIES: ");
-    fgets(buf, 128, fp);
+    fscanf(fp, "Similar movies: ");
+    fgets(buf, 20, fp);
     K = atoi(buf);
-
-    fscanf(fp, "HAS SIM MATRIX: ");
-    fgets(buf, 128, fp);
+    fscanf(fp, "Has sim matrix: ");
+    fgets(buf, 20, fp);
     hasSimMatrix = atoi(buf);
 
-    fscanf(fp, "PATH TO SIM MATRIX: ");
-    fgets(buf, 128, fp);
-    strncpy(pathToSimMatrix, buf, strlen(buf)-1);
-    fscanf(fp, "MIN SIM: %f", &minSim);
+    fscanf(fp, "Path to sim matrix: ");
+    fgets(pathToSimMatrix, 128, fp);
+    pathToSimMatrix[strlen(pathToSimMatrix)-1] = 0;
     
     
     printf("\nLoad config success: ");
     printf("\nnMovies: %d        nUsers: %d", nMovies, nUsers);
-    printf("\nFile format: %s", fileFormat);
+    printf("\nFile format: %s", ff);
+    printf("\nMovies data: %s", moviesData);
     printf("\nTrain set: %s", trainSet);
     printf("\nTest set: %s", testSet);
     printf("\nSimilar movies: %d", K);
@@ -96,10 +110,64 @@ void loadConfig(char* filename)
     fclose(fp);
 }
 
-//Ham doc du lieu tu file training
-void readData(float ***outArr, int nMovies, int nUsers, char* filename)
+int indexOfMovieID(int movieID)
+{
+    int m, l=0, h=nMovies - 1;
+    while (l<=h)
+    {
+	m = (l+h)/2;
+	if (movieID == MI[m])
+	    return m;
+	else if (movieID < MI[m])
+	    h = m-1;
+	else
+	    l = m+1;
+    }
+
+    return -1;
+}
+int countLines(char *filename)
 {
     FILE *fp = fopen(filename, "r");
+    if (fp == NULL)
+    {
+	perror("fopen() in countLines");
+	exit(1);
+    }
+
+    int n = 0;
+    char buf[1024];
+    while (!feof(fp))
+    {
+	fgets(buf, 1024, fp);
+	n++;
+    }
+    fclose(fp);
+
+    return n-1; //do loi cua fgets()
+}
+
+
+//Ham doc du lieu tu file training
+//Tham so nMovie va nUser khong duoc su dung, du dinh cho nhung truong hop
+//Mo rong chuong trinh va tai su dung
+void readData(float ***outArr, int nMovie, int nUser, char* filename)
+{
+    nMovies = countLines(moviesData);
+
+    MI = calloc(nMovies, sizeof(int));
+
+    FILE *fp = fopen(moviesData, "r");
+    char buf[1024];
+    for (int i=0; i<nMovies; i++)
+    {
+	fgets(buf, 1024, fp);
+	sscanf(buf, "%d", &MI[i]);
+    }
+    fclose(fp);
+
+    
+    fp = fopen(filename, "r");
     if (fp == NULL)
     {
 	perror("fopen()");
@@ -114,17 +182,21 @@ void readData(float ***outArr, int nMovies, int nUsers, char* filename)
     int uID, mID;
     long t;
     float rate;
+    int mIndex;
+
+    //   FILE *fp1 = fopen(moviesData, "r");
+    //fclose(fp1);
  
     while (!feof(fp))
     {
-	if (!strcmp(fileFormat, "ML10M"))
-	    fscanf(fp, "%d::%d::%f::%ld", &uID, &mID, &rate, &t);
-
-	if (!strcmp(fileFormat, "ML100K"))
-	    fscanf(fp, "%d%d%f%ld", &uID, &mID, &rate, &t);
 	
-	if (mID <= nMovies && uID <= nUsers)
-	    A[mID-1][uID-1] = rate;
+	if (dataFormat == ML100K)
+	    fscanf(fp, "%d%d%f%ld", &uID, &mID, &rate, &t);
+	else if (dataFormat == ML10M)
+	    fscanf(fp, "%d::%d::%f::%ld", &uID, &mID, &rate, &t);
+	mIndex = indexOfMovieID(mID);
+	if (mIndex < nMovies && uID <= nUsers)
+	    A[mIndex][uID-1] = rate;
     }
     
     *outArr = A;
@@ -134,7 +206,10 @@ void readData(float ***outArr, int nMovies, int nUsers, char* filename)
 
 //Ham doc du lieu tu file test
 void readTestData(Rating **B, int *len, char* filename)
-{
+{  
+    int nRating = countLines(filename);
+    Rating *T = calloc(nRating, sizeof(Rating));
+
     FILE *fp = fopen(filename, "r");
     if (fp == NULL)
     {
@@ -142,36 +217,23 @@ void readTestData(Rating **B, int *len, char* filename)
 	exit(1);
     }
 
-    int n=0;
-    char buff[1024];
-    while (!feof(fp))
-    {
-	fgets(buff, 1024, fp);
-	n++;
-    }
-
-    int nRating = n-1;// = countLines(filename);
-    Rating *T = calloc(nRating, sizeof(Rating));
-   
-    
     int uID, mID, j=0;
     long t;
     float rate;
-
-    rewind(fp);
+    int mIndex;
 
     for (int i=0; i<nRating; i++)
     {
-	if (!strcmp(fileFormat, "ML10M"))
-	    fscanf(fp, "%d::%d::%f::%ld", &uID, &mID, &rate, &t);
-
-	if (!strcmp(fileFormat, "ML100K"))
+	if (dataFormat == ML100K)
 	    fscanf(fp, "%d%d%f%ld", &uID, &mID, &rate, &t);
+	else if (dataFormat == ML10M)
+	    fscanf(fp, "%d::%d::%f::%ld", &uID, &mID, &rate, &t);
+	mIndex = indexOfMovieID(mID);
 	
-	if (mID <= nMovies && uID <= nUsers)
+	if (mIndex < nMovies && uID <= nUsers)
 	{
-	    T[j].uID = uID;
-	    T[j].mID = mID;
+	    T[j].uID = uID-1;
+	    T[j].mID = mIndex;
 	    T[j].R = rate;
 	    j++;
 	}
@@ -358,6 +420,8 @@ void ratePredict(Rating *R, float** A, float **sim)
 
     if (P != 0)
 	(*R).P = S/P;
+    else
+	(*R).P = 0; //Khong the du doan
     free(simSet);
     free(userRateSet);
 }
@@ -423,10 +487,24 @@ void writeResultToFile(Rating* B, int len, char* filename)
 
     for (int i=0; i<len; i++)
     {
-	fprintf(fp, "%d::%d::%.2f::%.2f\n",B[i].uID, B[i].mID, B[i].R, B[i].P);
+	fprintf(fp, "%d::%d::%.2f::%.2f\n",B[i].uID+1, MI[B[i].mID], B[i].R, B[i].P);
     }
     fclose(fp);
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -443,7 +521,7 @@ int main(int argc, char** argv)
     if (!hasSimMatrix)
     {
 	readData(&A, nMovies, nUsers, trainSet);
-
+    
 #ifdef DEBUG
 	readArr(A, nMovies, nUsers);
 #endif
@@ -470,7 +548,9 @@ int main(int argc, char** argv)
 		}
 	    }
 
-	    float rowMean = sum/t;
+	    float rowMean = 0;
+	    if (t!=0)
+		rowMean = sum/t;
 	    
 #pragma omp parallel for schedule(static, 3)
 	    for (int j=0; j<nUsers; j++)
@@ -479,7 +559,7 @@ int main(int argc, char** argv)
 		    A[i][j] -= rowMean;
 	    }
 
-	    printf("\n%d/%d", i, nMovies);
+	    printf("\r\%-10d/%10d", i, nMovies);
 	}
 
 
@@ -505,7 +585,7 @@ int main(int argc, char** argv)
 	    {
 		sim[i][j] = cosine(A[i], A[j], nUsers);
 	    }
-	    printf("\n%d/%d: ", i, nMovies);
+	    printf("\r%-10d/%10d", i, nMovies);
 	}
 
 	for (int i=0; i<nMovies; i++)
@@ -548,6 +628,7 @@ int main(int argc, char** argv)
     for (int i=0; i<len; i++)
     {
 	ratePredict(&B[i], A, sim);
+	//Neu khong the du doan thi dua ve gia tri trung binh
 	if (B[i].P == 0)
 	    B[i].P = AVG[B[i].uID];
     }
