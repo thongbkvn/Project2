@@ -5,7 +5,6 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <omp.h>
 #include <math.h>
 #include <unistd.h>
 #include <string.h>
@@ -87,7 +86,6 @@ void shellSort(Element A[], int n)
 
     for(m = n/2; m > 0; m /= 2)
     {
-#pragma omp parallel for shared(A,m,n) default(none)
         for(int i = 0; i < m; i++)
 	{
             insertionsort(&(A[i]), n-i, m);
@@ -106,7 +104,6 @@ float cosine(float *A, float *B, int n)
     float sum = 0;
     float modA = 0, modB = 0;
     
-#pragma omp parallel for schedule(static,3) reduction(+:sum,modA,modB)
     for (int i=0; i<n; i++)
     {
 	sum += A[i] * B[i];
@@ -290,7 +287,6 @@ void gbPrepare(float **A, int nMovies, int nUsers)
 
     int p = 0;
     
-#pragma omp parallel for schedule(static, 1) reduction(+:S,p)
     for (int i=0; i<nMovies; i++)
     {
 	int m = 0;
@@ -308,7 +304,6 @@ void gbPrepare(float **A, int nMovies, int nUsers)
     }
 
 
-#pragma omp parallel for schedule(static, 1)
     for (int j=0; j<nUsers; j++)
     {
 	int m = 0;
@@ -369,7 +364,6 @@ void gbPrepare(float **A, int nMovies, int nUsers)
 int main(int argc, char** argv)
 {
     loadConfig(CONFIG_FILE);
-    omp_set_num_threads(MAX_THREAD);
 
     indexMovie();
 
@@ -386,13 +380,11 @@ int main(int argc, char** argv)
     
 	/*        CHUAN HOA       */
 	printf("\n\nChuan hoa: ");
-#pragma omp parallel for
 	for (int i=0; i<nMovies; i++)
 	{
 	    float sum = 0; //Tong cac rating
 	    int t = 0;     //So rating
 	    
-#pragma omp parallel for schedule(static, 3) reduction(+:sum)
 	    for (int j=0; j<nUsers; j++)
 	    {
 		if (A[i][j] != 0)
@@ -406,7 +398,6 @@ int main(int argc, char** argv)
 	    if (t!=0)
 		rowMean = sum/t;
 	    
-#pragma omp parallel for schedule(static, 3)
 	    for (int j=0; j<nUsers; j++)
 	    {
 		if (A[i][j] != 0)
@@ -431,10 +422,8 @@ int main(int argc, char** argv)
 	for (int i=0; i<nMovies; i++)
 	    sim[i] = calloc(nMovies, sizeof(float*));
 
-#pragma omp parallel for schedule(static, 3)
 	for (int i=0; i<nMovies; i++)
 	{
-#pragma omp parallel for schedule(static, 3)
 	    for (int j=i+1; j<nMovies; j++)
 	    {
 		sim[i][j] = cosine(A[i], A[j], nUsers);
@@ -478,7 +467,6 @@ int main(int argc, char** argv)
     gbPrepare(A, nMovies, nUsers);
 
     
-#pragma omp parallel for schedule(static, 3)
     for (int i=0; i<len; i++)
     {
 	ratePredict(&B[i], A, sim);
@@ -491,7 +479,6 @@ int main(int argc, char** argv)
 
     float T = 0;
     float temp;
-#pragma omp parallel for schedule(static, 3) reduction(+:T) private(temp)
     for (int i=0; i<len; i++)
     {
 	temp = B[i].R - B[i].P;

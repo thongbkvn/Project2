@@ -263,7 +263,7 @@ void ratePredict(Rating *R, float** A, float **sim)
 	}
 
     
-	(*R).P = avg + (uMeans[u] - avg) + (mMeans[m]-avg);
+	(*R).P = uMeans[u] - avg + mMeans[m];
 
 
     
